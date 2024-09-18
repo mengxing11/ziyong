@@ -1,12 +1,11 @@
-/*
-new Env('品赞IP白名单');
-35 0-23 * * *
+/**
+* cron: 35 0-23 * * *
 by:萌欣
 品赞白名单自动替换解决青龙面板或无界处于全局模式下ip地址不正确
 需修改11-15行以及54,55行
 WxPusher一对一：设置WP_APP_TOKEN_ONE和WP_APP_MAIN_UID自动启动
 */
-
+const $ = new Env('品赞IP白名单');
 // 定义no(业务编号)、userId(用户id)、password(登录密码)、getkey(套餐提取密匙)、signkey(签名密匙)
 let no = '';
 let userId = '';
