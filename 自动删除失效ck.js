@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const QINGLONG_URL = process.env.QINGLONG_URL || 'http://127.0.0.1:5700';
 
-* cron:1 1 1 1 *
+
 // 获取青龙面板的Token
 function getToken() {
     const authFilePath = path.join(__dirname, '..', 'config', 'auth.json');
