@@ -11,7 +11,7 @@ const QINGLONG_URL = process.env.QINGLONG_URL || 'http://127.0.0.1:5700';
 //无论是否自定义变量名未禁用的变量不会被删除。
 // 获取青龙面板的Token
 function getToken() {
-    const authFilePath = path.join(__dirname, '..', 'config', 'auth.json');
+    const authFilePath = path.join(__dirname, '..', '..', 'config', 'auth.json');
     if (!fs.existsSync(authFilePath)) {
         throw new Error(`未找到auth.json文件，路径：${authFilePath}`);
     }
