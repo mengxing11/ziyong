@@ -1,15 +1,16 @@
-const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
-const QINGLONG_URL = process.env.QINGLONG_URL || 'http://127.0.0.1:5700';
-
-* cron:35 0-23 * * *
 //by萌欣
 //需要配置QINGLONG_URL和DELETE_VARS这2个变量
 //QINGLONG_URL填写你青龙面板的ip+端口
 //DELETE_VARS配置需要删除的变量名称，如JD_COOKIE,elmck,mtck等等，多个变量名称用英文逗号隔开
 //不配置DELETE_VARS默认只删除只删除名称完全等于JD_COOKIE的变量
 //无论是否自定义变量名未禁用的变量不会被删除。
+
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const QINGLONG_URL = process.env.QINGLONG_URL || 'http://127.0.0.1:5700';
+
+* cron:35 0-23 * * *
 // 获取青龙面板的Token
 function getToken() {
     const authFilePath = path.join(__dirname, '..', 'config', 'auth.json');
