@@ -1,8 +1,9 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-
 const QINGLONG_URL = process.env.QINGLONG_URL || 'http://127.0.0.1:5700';
+
+* cron:35 0-23 * * *
 //by萌欣
 //需要配置QINGLONG_URL和DELETE_VARS这2个变量
 //QINGLONG_URL填写你青龙面板的ip+端口
