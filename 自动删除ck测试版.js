@@ -6,6 +6,7 @@
 //无论是否自定义变量名未禁用的变量不会被删除。
 //新增功能：支持通过JD_COOKIE_WHITELIST配置白名单，白名单中的JD_COOKIE即使禁用也不会被删除
 //JD_COOKIE_WHITELIST支持填写pt_pin或完整的Cookie值，多个值用英文逗号分隔
+//新增功能：保护DELETE_VARS和JD_COOKIE_WHITELIST等重要配置变量不被误删
 
 const axios = require('axios');
 const fs = require('fs');
@@ -59,7 +60,7 @@ async function deleteEnv(envId, token) {
     }
 }
 
-// 检查是否在JD_COOKIE白名单中
+// 检查JD_COOKIE是否在白名单中
 function isInJdCookieWhitelist(envValue) {
     if (!envValue || !process.env.JD_COOKIE_WHITELIST) {
         return false;
@@ -76,6 +77,39 @@ function isInJdCookieWhitelist(envValue) {
     
     // 检查pt_pin或完整Cookie是否在白名单中
     return ptPin ? whitelist.includes(ptPin) : whitelist.includes(envValue);
+}
+
+// 检查变量是否在全局白名单中（保护重要配置变量）
+function isInGlobalWhitelist(envName) {
+    // 保护的变量列表，可根据需要添加更多
+    const protectedVars = ['DELETE_VARS', 'JD_COOKIE_WHITELIST', 'QINGLONG_URL'];
+    return protectedVars.includes(envName);
+}
+
+// 检查变量是否应该被保护（综合检查）
+function shouldProtect(envName, envValue) {
+    // 先检查是否是全局保护的变量名
+    if (isInGlobalWhitelist(envName)) {
+        console.log(`变量 ${envName} 受全局白名单保护，不会被删除`);
+        return true;
+    }
+    
+    // 再检查是否是JD_COOKIE且在JD_COOKIE白名单中
+    if (envName === 'JD_COOKIE') {
+        const isWhitelisted = isInJdCookieWhitelist(envValue);
+        if (isWhitelisted) {
+            console.log(`JD_COOKIE (pt_pin=${extractPtPin(envValue)}) 受白名单保护，不会被删除`);
+        }
+        return isWhitelisted;
+    }
+    
+    return false;
+}
+
+// 辅助函数：提取pt_pin用于日志输出
+function extractPtPin(cookieValue) {
+    const ptPinMatch = cookieValue.match(/pt_pin=([^;]+)/);
+    return ptPinMatch ? ptPinMatch[1] : 'unknown';
 }
 
 (async () => {
@@ -98,8 +132,7 @@ function isInJdCookieWhitelist(envValue) {
             envsToDelete = envs.filter(env => 
                 deleteNames.includes(env.name) && 
                 env.status === 1 &&
-                // 跳过JD_COOKIE白名单中的项
-                !(env.name === 'JD_COOKIE' && isInJdCookieWhitelist(env.value))
+                !shouldProtect(env.name, env.value)
             );
             console.log(`根据DELETE_VARS，找到${envsToDelete.length}个符合条件的环境变量`);
         } else {
@@ -107,13 +140,20 @@ function isInJdCookieWhitelist(envValue) {
             envsToDelete = envs.filter(env => 
                 env.name === 'JD_COOKIE' && 
                 env.status === 1 &&
-                // 跳过白名单中的项
-                !isInJdCookieWhitelist(env.value)
+                !shouldProtect(env.name, env.value)
             );
             console.log(`未设置DELETE_VARS，默认找到${envsToDelete.length}个名称为JD_COOKIE且禁用的环境变量`);
         }
 
-        if (envsToDelete.length === 0) {
+        // 输出待删除的变量信息
+        if (envsToDelete.length > 0) {
+            console.log('\n待删除的环境变量列表：');
+            envsToDelete.forEach(env => {
+                const ptPin = env.name === 'JD_COOKIE' ? extractPtPin(env.value) : 'N/A';
+                console.log(`- ${env.name} (ID: ${env.id}, pt_pin: ${ptPin})`);
+            });
+            console.log('');
+        } else {
             console.log('没有需要删除的环境变量');
             return;
         }
