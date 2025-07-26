@@ -1,10 +1,47 @@
 //by萌欣
 //需要配置QINGLONG_URL和DELETE_VARS这2个变量
 //QINGLONG_URL填写你青龙面板的ip+端口
-
 //DELETE_VARS配置需要删除的变量名称，如JD_COOKIE,elmck,mtck等等，多个变量名称用英文逗号隔开
+//不配置DELETE_VARS默认只删除只删除名称完全等于JD_COOKIE的变量
+//无论是否自定义变量名未禁用的变量不会被删除。
+//新增功能：支持通过JD_COOKIE_WHITELIST配置白名单，白名单中的JD_COOKIE即使禁用也不会被删除
+//JD_COOKIE_WHITELIST支持填写pt_pin或完整的Cookie值，多个值用英文逗号分隔
 
-//不配置DELETE_VARS默认只删除只删除名称完全等于JD_COOKIE的变量//无论是否自定义变量名未禁用的变量不会被删除。
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+
+const QINGLONG_URL = process.env.QINGLONG_URL || 'http://127.0.0.1:5700';
+
+// 获取青龙面板的Token
+function getToken() {
+    const authFilePath = path.join(__dirname, '..', '..', 'config', 'auth.json');
+    if (!fs.existsSync(authFilePath)) {
+        throw new Error(`未找到auth.json文件，路径：${authFilePath}`);
+    }
+    const authFile = fs.readFileSync(authFilePath, 'utf-8');
+    const authData = JSON.parse(authFile);
+    if (!authData.token) {
+        throw new Error('auth.json中未找到有效的token');
+    }
+    return authData.token;
+}
+
+// 获取所有环境变量
+async function getEnvs(token) {
+    try {
+        const response = await axios.get(`${QINGLONG_URL}/open/envs`, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        console.log('获取到的所有环境变量：', JSON.stringify(response.data, null, 2));
+        return response.data.data || [];
+    } catch (error) {
+        throw new Error(`获取环境变量失败：${error.message}。当前青龙地址：${QINGLONG_URL}，请检查地址是否正确或服务是否启动`);
+    }
+}
 
 // 删除指定环境变量
 async function deleteEnv(envId, token) {
@@ -22,13 +59,23 @@ async function deleteEnv(envId, token) {
     }
 }
 
-// 新增辅助函数：判断JD_COOKIE是否包含白名单备注
-function isJDCookieWithWhitelist(env) {
-    return (
-        env.name === 'JD_COOKIE' && 
-        env.remarks && 
-        env.remarks.includes('白名单')
-    );
+// 检查是否在JD_COOKIE白名单中
+function isInJdCookieWhitelist(envValue) {
+    if (!envValue || !process.env.JD_COOKIE_WHITELIST) {
+        return false;
+    }
+    
+    const whitelist = process.env.JD_COOKIE_WHITELIST.split(',').map(item => item.trim());
+    if (whitelist.length === 0) {
+        return false;
+    }
+    
+    // 从Cookie值中提取pt_pin
+    const ptPinMatch = envValue.match(/pt_pin=([^;]+)/);
+    const ptPin = ptPinMatch ? ptPinMatch[1] : null;
+    
+    // 检查pt_pin或完整Cookie是否在白名单中
+    return ptPin ? whitelist.includes(ptPin) : whitelist.includes(envValue);
 }
 
 (async () => {
@@ -42,37 +89,36 @@ function isJDCookieWithWhitelist(env) {
             return;
         }
 
-        // === 修改：未设置DELETE_VARS时，默认只删除名称为JD_COOKIE且禁用的变量，且备注中不含"白名单" ===
+        // 筛选需要删除的环境变量
         let envsToDelete = [];
         
         if (process.env.DELETE_VARS) {
-            // 若设置了DELETE_VARS，则按列表删除（排除JD_COOKIE中备注含"白名单"的变量）
+            // 若设置了DELETE_VARS，则按列表删除
             const deleteNames = process.env.DELETE_VARS.split(',').map(name => name.trim());
-            envsToDelete = envs.filter(env => {
-                // 排除JD_COOKIE中备注含"白名单"的变量
-                if (isJDCookieWithWhitelist(env)) {
-                    console.log(`保留JD_COOKIE（ID: ${env.id}）：备注中包含"白名单"`);
-                    return false;
-                }
-                return deleteNames.includes(env.name) && env.status === 1;
-            });
+            envsToDelete = envs.filter(env => 
+                deleteNames.includes(env.name) && 
+                env.status === 1 &&
+                // 跳过JD_COOKIE白名单中的项
+                !(env.name === 'JD_COOKIE' && isInJdCookieWhitelist(env.value))
+            );
             console.log(`根据DELETE_VARS，找到${envsToDelete.length}个符合条件的环境变量`);
         } else {
-            // 若未设置DELETE_VARS，默认只删除名称为JD_COOKIE且禁用的变量，且备注中不含"白名单"
+            // 若未设置DELETE_VARS，默认只删除名称为JD_COOKIE且禁用的变量
             envsToDelete = envs.filter(env => 
                 env.name === 'JD_COOKIE' && 
-                env.status === 1 && 
-                !isJDCookieWithWhitelist(env)
+                env.status === 1 &&
+                // 跳过白名单中的项
+                !isInJdCookieWhitelist(env.value)
             );
             console.log(`未设置DELETE_VARS，默认找到${envsToDelete.length}个名称为JD_COOKIE且禁用的环境变量`);
         }
-        // ==============================================
 
         if (envsToDelete.length === 0) {
             console.log('没有需要删除的环境变量');
             return;
         }
 
+        // 执行删除操作
         for (const env of envsToDelete) {
             const envId = env.id;
             if (!envId) {
